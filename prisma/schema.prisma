@@ -1,0 +1,134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Candidate {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  phone       String?
+  location    String?
+  linkedinUrl String?
+  githubUrl   String?
+  portfolioUrl String?
+  resumePath  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Resume processing
+  resumeText      String?
+  resumeEmbedding Float[]
+  skills          String[] // Extracted skills
+  experience      Json?   // Structured experience data
+  education       Json?   // Structured education data
+
+  // Matching data
+  matchScores     MatchScore[]
+  jobApplications  JobApplication[]
+  candidateRankings CandidateRanking[]
+
+  @@map("candidates")
+}
+
+model JobPosting {
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  requirements  String
+  department    String?
+  location      String?
+  employmentType String? // full-time, part-time, contract
+  salaryRange   String?
+  postedBy      String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // AI processing
+  jobEmbedding  Float[]
+  extractedSkills String[]
+  experienceLevel String? // junior, mid, senior, executive
+
+  // Matching data
+  matchScores     MatchScore[]
+  applications    JobApplication[]
+  screeningSessions ScreeningSession[]
+
+  @@map("job_postings")
+}
+
+model MatchScore {
+  id           String   @id @default(cuid())
+  candidateId  String
+  jobId        String
+  overallScore Float    // 0-1 overall match score
+  skillMatch   Float    // Skills matching score
+  experienceMatch Float // Experience relevance score
+  educationMatch  Float // Education relevance score
+  locationMatch   Float // Location preference score
+  reasoning      String? // AI reasoning for the score
+  createdAt     DateTime @default(now())
+
+  candidate    Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  job          JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, jobId])
+  @@map("match_scores")
+}
+
+model JobApplication {
+  id          String   @id @default(cuid())
+  candidateId String
+  jobId       String
+  status      String   // applied, screening, interview, rejected, hired
+  appliedAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  notes       String?  // Recruiter notes
+
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  job         JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, jobId])
+  @@map("job_applications")
+}
+
+model ScreeningSession {
+  id          String   @id @default(cuid())
+  jobId       String
+  status      String   // active, completed, cancelled
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  // AI Agent session data
+  sessionId   String   @unique
+  agentMemory Json?    // Agent conversation memory
+
+  job         JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  rankings    CandidateRanking[]
+
+  @@map("screening_sessions")
+}
+
+model CandidateRanking {
+  id          String   @id @default(cuid())
+  sessionId   String
+  candidateId String
+  rank        Int      // Position in ranked list
+  score       Float    // Final ranking score
+  reasoning   String?  // AI reasoning for this ranking
+  shortlisted Boolean  @default(false)
+
+  session     ScreeningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, candidateId])
+  @@map("candidate_rankings")
+}
